@@ -1,0 +1,83 @@
+"""
+서울 25개 자치구 지진 옥외대피장소 수용률 (주민등록인구 기준) 막대그래프
+입력: 자치구별_수용률_종합.csv
+출력: fig_capacity_by_gu.png (300dpi), fig_capacity_by_gu.pdf (벡터)
+"""
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+from matplotlib import font_manager
+
+# ---------------------------------------------------------------
+# 1. 한글 글꼴 설정
+#    설치된 글꼴 중 후보 목록에서 처음 찾은 것을 사용
+#    (macOS: AppleGothic / Windows: Malgun Gothic / Linux: 나눔고딕·Noto)
+# ---------------------------------------------------------------
+installed = {f.name for f in font_manager.fontManager.ttflist}
+candidates = ["AppleGothic", "Malgun Gothic", "NanumGothic", "Noto Sans CJK KR"]
+korean_font = next((f for f in candidates if f in installed), None)
+if korean_font is None:
+    raise RuntimeError("한글 글꼴을 찾지 못했습니다. 나눔고딕 등을 설치하세요.")
+plt.rcParams["axes.unicode_minus"] = False   # 마이너스 기호 깨짐 방지
+
+# ---------------------------------------------------------------
+# 2. 데이터 불러오기
+#    utf-8-sig: 파일 맨 앞의 BOM 문자 제거 (안 하면 첫 열 이름이 '\ufeffgu'가 됨)
+# ---------------------------------------------------------------
+df = pd.read_csv("자치구별_수용률_종합.csv", encoding="utf-8-sig")
+
+# 서울 전체 수용률 = 전체 수용인원 합 / 전체 주민등록인구 합
+# (구별 수용률의 평균이 아님에 주의: 인구가 큰 구에 가중치가 붙음)
+seoul_rate = df["수용인원"].sum() / df["주민등록인구"].sum() * 100
+
+# 수용률 높은 순으로 정렬 (가로 막대에서 위가 가장 높게)
+df = df.sort_values("수용률_주민등록", ascending=False)
+
+# 100% 미만 여부로 그룹 나누기 (색 구분용)
+df["구분"] = df["수용률_주민등록"].apply(
+    lambda x: "100% 미만" if x < 100 else "100% 이상"
+)
+
+# ---------------------------------------------------------------
+# 3. 그래프 그리기
+# ---------------------------------------------------------------
+# set_theme는 글꼴 설정을 덮어쓰므로, 글꼴은 반드시 여기서 지정
+sns.set_theme(style="whitegrid", font=korean_font,
+              rc={"axes.unicode_minus": False})
+fig, ax = plt.subplots(figsize=(8, 9))
+
+sns.barplot(
+    data=df,
+    x="수용률_주민등록",
+    y="gu",
+    hue="구분",
+    palette={"100% 미만": "#D55E00", "100% 이상": "#0072B2"},  # 색맹 친화 색
+    dodge=False,
+    ax=ax,
+)
+
+# 기준선: 100% (실선), 서울 전체 (점선) → 색이 아니라 선 모양으로도 구분
+ax.axvline(100, color="black", linestyle="-", linewidth=1.2, label="100% 기준")
+ax.axvline(seoul_rate, color="gray", linestyle="--", linewidth=1.2,
+           label=f"서울 전체 {seoul_rate:.1f}%")
+
+# 막대 끝에 수치 표시
+# 주의: hue를 쓰면 막대가 그룹별로 따로 그려져서 ax.patches 순서가 표 순서와 다름.
+#       그래서 그룹(container)마다 bar_label로 붙여야 숫자가 엉뚱한 막대에 안 붙음.
+for container in ax.containers:
+    ax.bar_label(container, fmt="%.1f%%", padding=3, fontsize=8)
+
+ax.set_xlabel("수용률 (%) = 수용인원 ÷ 주민등록인구 × 100")
+ax.set_ylabel("")
+ax.set_title("자치구별 지진 옥외대피장소 수용률 (주민등록인구 기준)")
+ax.set_xlim(0, df["수용률_주민등록"].max() * 1.12)  # 수치 라벨 들어갈 여백
+ax.legend(loc="lower right", frameon=True)
+
+plt.tight_layout()
+
+# ---------------------------------------------------------------
+# 4. 저장 (논문용 PDF + 발표용 PNG)
+# ---------------------------------------------------------------
+fig.savefig("fig_capacity_by_gu.png", dpi=300)
+fig.savefig("fig_capacity_by_gu.pdf")
+plt.show()
