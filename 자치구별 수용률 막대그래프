@@ -57,7 +57,7 @@ sns.barplot(
 )
 
 # 기준선: 100% (실선), 서울 전체 (점선) → 색이 아니라 선 모양으로도 구분
-ax.axvline(100, color="black", linestyle="-", linewidth=1.2, label="100% 기준")
+ax.axvline(100, color="black", linestyle="-.", linewidth=1.2, label="100% 기준")
 ax.axvline(seoul_rate, color="gray", linestyle="--", linewidth=1.2,
            label=f"서울 전체 {seoul_rate:.1f}%")
 
