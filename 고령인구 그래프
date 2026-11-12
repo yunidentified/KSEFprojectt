@@ -1,0 +1,82 @@
+"""
+서울 25개 자치구 고령인구(65세 이상) 비율 막대그래프
+입력: 자치구별_수용률_종합.csv  (65세이상, 주민등록인구, 고령비율 열 사용)
+출력: fig_elderly_by_gu.png (300dpi), fig_elderly_by_gu.pdf (벡터)
+인구 기준: 주민등록인구 2026년 3/4분기 (한국인 + 등록외국인)
+"""
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+from matplotlib import font_manager
+
+# ---------------------------------------------------------------
+# 1. 한글 글꼴 설정 (설치된 글꼴 중 처음 찾은 것 사용)
+# ---------------------------------------------------------------
+installed = {f.name for f in font_manager.fontManager.ttflist}
+candidates = ["AppleGothic", "Apple SD Gothic Neo", "Malgun Gothic",
+              "NanumGothic", "Noto Sans CJK KR"]
+korean_font = next((f for f in candidates if f in installed), None)
+if korean_font is None:
+    raise RuntimeError("한글 글꼴을 찾지 못했습니다. 나눔고딕 등을 설치하세요.")
+
+# ---------------------------------------------------------------
+# 2. 데이터 불러오기
+# ---------------------------------------------------------------
+df = pd.read_csv("자치구별_수용률_종합.csv", encoding="utf-8-sig")
+
+# 서울 전체 고령비율 = 전체 65세 이상 합 / 전체 인구 합
+# (구별 비율의 단순 평균이 아님)
+seoul_rate = df["65세이상"].sum() / df["주민등록인구"].sum() * 100
+
+# 고령비율 높은 순 정렬
+df = df.sort_values("고령비율", ascending=False)
+
+# 서울 전체보다 높은지로 색 구분
+df["구분"] = df["고령비율"].apply(
+    lambda x: "서울 전체보다 높음" if x > seoul_rate else "서울 전체 이하"
+)
+
+# ---------------------------------------------------------------
+# 3. 그래프 그리기
+# ---------------------------------------------------------------
+sns.set_theme(style="whitegrid", font=korean_font,
+              rc={"axes.unicode_minus": False})
+fig, ax = plt.subplots(figsize=(8, 9))
+
+sns.barplot(
+    data=df,
+    x="고령비율",
+    y="gu",
+    hue="구분",
+    palette={"서울 전체보다 높음": "#D55E00", "서울 전체 이하": "#0072B2"},
+    dodge=False,
+    ax=ax,
+)
+
+# 서울 전체 기준선 (점선)
+ax.axvline(seoul_rate, color="black", linestyle="--", linewidth=1.2,
+           label=f"서울 전체 {seoul_rate:.1f}%")
+
+# 막대 끝 수치 (hue 그룹별로 붙여야 순서가 안 꼬임)
+for container in ax.containers:
+    ax.bar_label(container, fmt="%.1f%%", padding=3, fontsize=8)
+
+ax.set_xlabel("고령인구 비율 (%) = 65세 이상 인구 ÷ 주민등록인구 × 100")
+ax.set_ylabel("")
+ax.set_title("자치구별 고령인구(65세 이상) 비율")
+ax.set_xlim(0, df["고령비율"].max() * 1.15)
+ax.legend(loc="lower right", frameon=True)
+
+# 출처·기준 시점
+fig.text(0.01, 0.005,
+         "자료: 서울시 주민등록인구 2026년 3/4분기 (한국인 + 등록외국인)",
+         fontsize=7, color="gray")
+
+plt.tight_layout(rect=(0, 0.02, 1, 1))
+
+# ---------------------------------------------------------------
+# 4. 저장
+# ---------------------------------------------------------------
+fig.savefig("fig_elderly_by_gu.png", dpi=300)
+fig.savefig("fig_elderly_by_gu.pdf")
+plt.show()
