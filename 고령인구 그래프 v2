@@ -1,0 +1,116 @@
+"""
+자치구별 고령인구 비율 점 그래프 (도봉·강북·구로 강조 + 수용률 표기)
+입력: 자치구별_수용률_종합.csv
+출력: fig_elderly_highlight.png (300dpi), fig_elderly_highlight.pdf (벡터)
+인구 기준: 주민등록인구 2026년 3/4분기 (한국인 + 등록외국인)
+ 
+25개 구를 모두 보여주고(비교 기준 유지), 본문에서 다루는 세 구만 색으로 강조한다.
+"""
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+from matplotlib import font_manager
+ 
+# ---------------------------------------------------------------
+# 1. 한글 글꼴 설정
+# ---------------------------------------------------------------
+installed = {f.name for f in font_manager.fontManager.ttflist}
+candidates = ["AppleGothic", "Apple SD Gothic Neo", "Malgun Gothic",
+              "NanumGothic", "Noto Sans CJK KR"]
+korean_font = next((f for f in candidates if f in installed), None)
+if korean_font is None:
+    raise RuntimeError("한글 글꼴을 찾지 못했습니다. 나눔고딕 등을 설치하세요.")
+ 
+# ---------------------------------------------------------------
+# 2. 데이터 불러오기
+# ---------------------------------------------------------------
+df = pd.read_csv("자치구별_수용률_종합.csv", encoding="utf-8-sig")
+seoul_rate = df["65세이상"].sum() / df["주민등록인구"].sum() * 100
+df = df.sort_values("고령비율", ascending=False).reset_index(drop=True)
+ 
+HIGHLIGHT = ["도봉구", "강북구", "구로구"]      # 본문에서 다루는 구
+df["강조"] = df["gu"].isin(HIGHLIGHT)
+ 
+GRAY = "#B0B0B0"
+ORANGE = "#D55E00"
+ 
+ 
+def note(row):
+    """강조할 구 옆에 붙일 수용률 설명 문구"""
+    cap = row["수용률_주민등록"]
+    if row["gu"] == "구로구":
+        return f"수용률 {cap:.1f}% (서울 최저)"
+    return f"수용률 {cap:.1f}% → 최대 시설 제외 {row['최대시설제외_수용률']:.1f}%"
+ 
+ 
+# ---------------------------------------------------------------
+# 3. 그래프 그리기
+# ---------------------------------------------------------------
+sns.set_theme(style="whitegrid", font=korean_font,
+              rc={"axes.unicode_minus": False})
+fig, ax = plt.subplots(figsize=(8, 9))
+ 
+# y 위치를 구 이름(글자)이 아니라 순위 숫자(0, 1, 2, ...)로 줌.
+# 주의: 구 이름을 y로 쓰고 그룹을 나눠 두 번 그리면, seaborn이 그룹마다
+#       자리를 따로 매겨서 점이 엉뚱한 줄에 찍힘. 숫자로 주면 줄이 고정됨.
+df["순위"] = range(len(df))
+ 
+sns.scatterplot(
+    data=df, x="고령비율", y="순위",
+    hue="강조", palette={True: ORANGE, False: GRAY},   # 색: 강조 여부
+    size="강조", sizes={True: 110, False: 50},          # 크기: 강조 여부
+    legend=False, ax=ax, zorder=3,
+)
+ax.set_yticks(range(len(df)))
+ax.set_yticklabels(df["gu"])
+ax.set_ylim(len(df) + 0.3, -0.7)   # 위가 1위가 되도록 뒤집기 (아래에 기준선 이름 자리)
+ 
+# 서울 전체 기준선
+ax.axvline(seoul_rate, color="black", linestyle="--", linewidth=1.1,
+           alpha=0.6, zorder=1)
+# 기준선 이름은 그래프 맨 아래 줄 아래 빈 공간에 표시
+ax.text(seoul_rate + 0.1, len(df) - 0.6, f"서울 전체 {seoul_rate:.1f}%",
+        ha="left", va="bottom", fontsize=8)
+ 
+for i, row in df.iterrows():
+    if row["강조"]:
+        # 점 오른쪽: 고령비율 (굵게)
+        ax.text(row["고령비율"] + 0.25, i, f"{row['고령비율']:.1f}%",
+                va="center", fontsize=9, fontweight="bold", color=ORANGE)
+        # 점 왼쪽: 수용률 설명 (흰 배경으로 기준선 위에서도 읽히게)
+        ax.text(row["고령비율"] - 0.3, i, note(row),
+                ha="right", va="center", fontsize=8.5, color="black",
+                bbox=dict(boxstyle="round,pad=0.25", fc="white",
+                          ec=ORANGE, lw=0.8))
+    else:
+        ax.text(row["고령비율"] + 0.2, i, f"{row['고령비율']:.1f}%",
+                va="center", fontsize=7, color="gray")
+ 
+# y축 구 이름: 강조한 구만 굵은 주황색
+for label in ax.get_yticklabels():
+    if label.get_text() in HIGHLIGHT:
+        label.set_color(ORANGE)
+        label.set_fontweight("bold")
+ 
+ax.set_xlim(15, 29)
+ax.set_xlabel("고령인구 비율 (%) = 65세 이상 인구 ÷ 주민등록인구 × 100\n"
+              "※ 가로축은 15%부터 시작")
+ax.set_ylabel("")
+ax.set_title("자치구별 고령인구(65세 이상) 비율과 대피장소 수용률")
+ax.grid(axis="y", linestyle=":", alpha=0.6)
+ 
+fig.text(0.01, 0.005,
+         "자료: 서울시 주민등록인구 2026년 3/4분기 (한국인 + 등록외국인), "
+         "서울시 지진 옥외대피장소. 25개 자치구 전체에서 고령비율과 수용률의 "
+         "유의한 관계는 확인되지 않음 (Spearman ρ=−0.13, p=0.54).",
+         fontsize=6.5, color="gray", wrap=True)
+ 
+plt.tight_layout(rect=(0, 0.03, 1, 1))
+ 
+# ---------------------------------------------------------------
+# 4. 저장
+# ---------------------------------------------------------------
+fig.savefig("fig_elderly_highlight.png", dpi=300)
+fig.savefig("fig_elderly_highlight.pdf")
+plt.show()
+ 
